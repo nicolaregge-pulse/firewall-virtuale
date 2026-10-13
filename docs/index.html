@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Router virtuale RV-1</title>
+<style>
+:root{--bg:#eef1f5;--fg:#1d2430;--mu:#5d6878;--card:#fff;--bd:#c9d2de;--win:#dfe5ee;--sel:#2b6cb0;--ok:#1f8a4c;--ko:#c0392b;--term:#0f1419;--termfg:#d7e3f0;--warn:#b7791f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181e;--fg:#e6ebf2;--mu:#9aa6b6;--card:#1d232c;--bd:#323b47;--win:#252d38;--sel:#5b9bd5}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 "Segoe UI",Tahoma,Arial,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:#1f2f45;color:#fff;flex-wrap:wrap}
+header b{font-size:18px}header .mu{color:#b9c6d8;font-size:13px}
+.app{display:grid;grid-template-columns:190px 1fr 360px;gap:10px;padding:10px;min-height:calc(100vh - 52px)}
+@media (max-width:1100px){.app{grid-template-columns:1fr}}
+nav{background:var(--win);border:1px solid var(--bd);border-radius:8px;padding:6px}
+nav button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--fg);padding:7px 9px;border-radius:5px;font:inherit;cursor:pointer}
+nav button.on{background:var(--sel);color:#fff}nav .gr{font-size:12px;color:var(--mu);margin:8px 6px 2px;text-transform:uppercase}
+.win{background:var(--card);border:1px solid var(--bd);border-radius:8px;display:flex;flex-direction:column;min-width:0}
+.win h2{margin:0;font-size:15px;padding:8px 12px;background:var(--win);border-bottom:1px solid var(--bd);border-radius:8px 8px 0 0}
+.corpo{padding:10px 12px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px solid var(--bd);padding:5px 6px;text-align:left}th{color:var(--mu);font-weight:600}
+tr.dis td{opacity:.45}
+.bar{display:flex;gap:6px;margin:0 0 8px;flex-wrap:wrap}
+button.b{border:1px solid var(--bd);background:var(--win);color:var(--fg);border-radius:5px;padding:5px 10px;font:inherit;cursor:pointer}
+button.b.p{background:var(--sel);color:#fff;border-color:var(--sel)}
+form.f{display:grid;grid-template-columns:150px 1fr;gap:6px 10px;align-items:center;background:var(--win);padding:10px;border-radius:6px;margin:8px 0}
+form.f input,form.f select{font:inherit;padding:4px 6px;border:1px solid var(--bd);border-radius:4px;background:var(--card);color:var(--fg)}
+#term{background:var(--term);color:var(--termfg);font:14px/1.45 Consolas,"Courier New",monospace;padding:10px;height:340px;overflow:auto;border-radius:0 0 8px 8px;white-space:pre-wrap}
+#riga{display:flex;background:var(--term);border-top:1px solid #2a3440}#riga span{color:#7fd38f;font:14px Consolas,monospace;padding:8px 0 8px 10px;white-space:nowrap}
+#cmd{flex:1;background:transparent;border:0;color:var(--termfg);font:14px Consolas,"Courier New",monospace;padding:8px;outline:none}
+.t-ok{color:#7fd38f}.t-ko{color:#ff8a7a}.t-mu{color:#8b98a8}.t-cmd{color:#ffd479}
+.lato{display:flex;flex-direction:column;gap:10px}
+.mis{border:2px solid var(--bd);border-radius:8px;padding:8px 10px;margin:6px 0}.mis.fatta{border-color:var(--ok)}.mis.ora{border-color:var(--sel)}
+.mis b{display:block}.mis .st{font-size:13px;font-weight:700}.fatta .st{color:var(--ok)}
+svg text{fill:var(--fg);font-size:12px}
+.traccia li{margin:3px 0}.passa{color:var(--ok);font-weight:700}.blocca{color:var(--ko);font-weight:700}
+.prova{display:grid;grid-template-columns:1fr 1fr;gap:6px}.prova select,.prova input{font:inherit;padding:4px;border:1px solid var(--bd);border-radius:4px;background:var(--card);color:var(--fg);width:100%}
+.mu{color:var(--mu);font-size:13px}
+</style>
+</head>
+<body>
+<header><b id="nome">RV-1</b><span class="mu">Router virtuale per imparare · ispirato a RouterOS e Winbox · simulazione didattica</span><span style="flex:1"></span><button class="b" id="esporta">Export della configurazione</button><button class="b" id="azzera">Ripristina il router</button></header>
+<div class="app">
+<nav id="menu">
+  <div class="gr">Router</div>
+  <button data-v="interfacce" class="on">Interfaces</button>
+  <div class="gr">IP</div>
+  <button data-v="indirizzi">Addresses</button>
+  <button data-v="rotte">Routes</button>
+  <button data-v="filtro">Firewall · Filter Rules</button>
+  <button data-v="nat">Firewall · NAT</button>
+  <div class="gr">Sistema</div>
+  <button data-v="identita">Identity</button>
+  <button data-v="aiuto">Guida ai comandi</button>
+</nav>
+<main style="display:flex;flex-direction:column;gap:10px;min-width:0">
+  <section class="win"><h2 id="titolo">Interfaces</h2><div class="corpo" id="vista"></div></section>
+  <section class="win"><h2>Terminal <span class="mu">(scrivi un comando e premi Invio · «?» per l'aiuto)</span></h2><div id="term"></div><div id="riga"><span id="prompt">[admin@RV-1] &gt;</span><input id="cmd" autocomplete="off" spellcheck="false"></div></section>
+</main>
+<aside class="lato">
+  <section class="win"><h2>La rete</h2><div class="corpo"><svg id="rete" viewBox="0 0 340 250" width="100%"></svg></div></section>
+  <section class="win"><h2>Manda un pacchetto</h2><div class="corpo">
+    <div class="prova">
+      <label>Da<select id="pDa"></select></label>
+      <label>A<select id="pA"></select></label>
+      <label>Protocollo<select id="pProto"><option>tcp</option><option>udp</option><option>icmp</option></select></label>
+      <label>Porta<input id="pPorta" value="80"></label>
+    </div>
+    <p><button class="b p" id="pVai">Manda</button></p>
+    <ol class="traccia" id="traccia"></ol>
+  </div></section>
+  <section class="win"><h2>Missioni</h2><div class="corpo" id="missioni"></div></section>
+</aside>
+</div>
+<script>
+(function () {
+'use strict';
+// ====================== LA RETE SIMULATA ======================
+// LAN su ether2: 192.168.88.0/24. WAN su ether1: l'operatore (ISP) dà 203.0.113.2/30, gateway 203.0.113.1.
+var HOST = {
+  pc1: { nome: 'PC 1', ip: '192.168.88.10', gw: '192.168.88.1', lato: 'lan', porte: [] },
+  pc2: { nome: 'PC 2', ip: '192.168.88.11', gw: '192.168.88.1', lato: 'lan', porte: [] },
+  server: { nome: 'Server web', ip: '192.168.88.20', gw: '192.168.88.1', lato: 'lan', porte: [80, 443, 22] },
+  sito: { nome: 'Sito su Internet', ip: '93.184.216.34', lato: 'internet', porte: [80, 443] },
+  dns: { nome: 'DNS su Internet', ip: '8.8.8.8', lato: 'internet', porte: [53] },
+  esterno: { nome: 'PC di uno sconosciuto', ip: '198.51.100.7', lato: 'internet', porte: [] }
+};
+var ISP_GW = '203.0.113.1', ISP_RETE = '203.0.113.0/30';
+var IFACE = ['ether1', 'ether2', 'ether3', 'ether4'];
+
+function vuoto() {
+  return { identity: 'RV-1', interfacce: IFACE.map(function (n) { return { name: n, disabled: false, comment: n === 'ether1' ? 'verso Internet (WAN)' : n === 'ether2' ? 'verso la rete interna (LAN)' : '' }; }),
+    indirizzi: [], rotte: [], filtro: [], nat: [] };
+}
+var C;
+try { C = JSON.parse(localStorage.getItem('rv1-config') || 'null'); } catch (e) { C = null; }
+if (!C || !C.interfacce) C = vuoto();
+function salva() { try { localStorage.setItem('rv1-config', JSON.stringify(C)); } catch (e) {} }
+
+// ====================== INDIRIZZI IP ======================
+function ip2n(ip) { var p = String(ip).split('.').map(Number); if (p.length !== 4 || p.some(function (x) { return isNaN(x) || x < 0 || x > 255; })) return null; return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3]; }
+function cidr(s) { var m = String(s).match(/^(\d+\.\d+\.\d+\.\d+)(?:\/(\d+))?$/); if (!m) return null; var n = ip2n(m[1]), l = m[2] === undefined ? 32 : +m[2]; if (n === null || l > 32) return null; var mask = l === 0 ? 0 : (0xFFFFFFFF << (32 - l)) >>> 0; return { ip: n, len: l, mask: mask, rete: (n & mask) >>> 0 }; }
+function dentro(ip, rete) { var r = cidr(rete), n = ip2n(ip); return r && n !== null && ((n & r.mask) >>> 0) === r.rete; }
+function lunghezza(rete) { var r = cidr(rete); return r ? r.len : -1; }
+function n2ip(n) { return [n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255].join('.'); }
+function reteDi(a) { var r = cidr(a); return r ? n2ip(r.rete) + '/' + r.len : ''; }
+
+// ====================== IL TERMINALE (linguaggio stile RouterOS, semplificato) ======================
+var T = document.getElementById('term'), CMD = document.getElementById('cmd'), CTX = [], STORIA = [], SP = 0;
+function scrivi(t, cl) { var d = document.createElement('div'); if (cl) d.className = cl; d.textContent = t; T.appendChild(d); T.scrollTop = T.scrollHeight; }
+function aggiornaPrompt() { document.getElementById('prompt').textContent = '[admin@' + C.identity + '] ' + (CTX.length ? '/' + CTX.join('/') : '') + ' >'; document.getElementById('nome').textContent = C.identity; }
+var MENU = { 'interface': 'interfacce', 'ip address': 'indirizzi', 'ip route': 'rotte', 'ip firewall filter': 'filtro', 'ip firewall nat': 'nat', 'system identity': 'identita' };
+var CAMPI = {
+  indirizzi: ['address', 'interface', 'comment', 'disabled'],
+  rotte: ['dst-address', 'gateway', 'comment', 'disabled'],
+  filtro: ['chain', 'src-address', 'dst-address', 'protocol', 'dst-port', 'in-interface', 'out-interface', 'action', 'comment', 'disabled'],
+  nat: ['chain', 'src-address', 'dst-address', 'protocol', 'dst-port', 'in-interface', 'out-interface', 'action', 'to-addresses', 'to-ports', 'comment', 'disabled']
+};
+function parametri(parti) {
+  var o = {}, err = null;
+  parti.forEach(function (p) { var m = p.match(/^([a-z-]+)=(.*)$/); if (!m) { if (!err) err = 'parametro non capito: ' + p; return; } o[m[1]] = m[2].replace(/^"(.*)"$/, '$1'); });
+  return { o: o, err: err };
+}
+function dividi(riga) { var out = [], m, re = /([a-z-]+="[^"]*"|"[^"]*"|\S+)/g; while ((m = re.exec(riga))) out.push(m[1]); return out; }
+function valida(tab, o) {
+  var c = CAMPI[tab]; for (var k in o) if (c.indexOf(k) < 0) return 'il parametro «' + k + '» non esiste qui. Quelli possibili: ' + c.join(', ');
+  if (tab === 'indirizzi') { if (!o.address || !cidr(o.address) || o.address.indexOf('/') < 0) return 'serve address=indirizzo/maschera, per esempio address=192.168.88.1/24'; if (IFACE.indexOf(o.interface) < 0) return 'serve interface= una di ' + IFACE.join(', '); }
+  if (tab === 'rotte') { if (!o['dst-address'] || !cidr(o['dst-address'])) return 'serve dst-address=, per esempio dst-address=0.0.0.0/0 (tutte le destinazioni)'; if (!o.gateway || ip2n(o.gateway) === null) return 'serve gateway= un indirizzo IP'; }
+  if (tab === 'filtro') { if (['input', 'forward', 'output'].indexOf(o.chain) < 0) return 'serve chain=input, forward oppure output'; if (['accept', 'drop', 'reject'].indexOf(o.action || 'accept') < 0) return 'action= accept, drop oppure reject'; }
+  if (tab === 'nat') { if (['srcnat', 'dstnat'].indexOf(o.chain) < 0) return 'serve chain=srcnat oppure chain=dstnat'; if (['masquerade', 'src-nat', 'dst-nat', 'accept'].indexOf(o.action) < 0) return 'action= masquerade, src-nat, dst-nat'; if (o.action === 'dst-nat' && !o['to-addresses']) return 'con action=dst-nat serve to-addresses='; }
+  if (tab === 'filtro' || tab === 'nat') { if (o.protocol && ['tcp', 'udp', 'icmp'].indexOf(o.protocol) < 0) return 'protocol= tcp, udp oppure icmp'; if (o['dst-port'] && !o.protocol) return 'per usare dst-port serve anche protocol=tcp o protocol=udp'; ['in-interface', 'out-interface'].forEach(function (k) { if (o[k] && IFACE.indexOf(o[k]) < 0) o.__e = k + '= una di ' + IFACE.join(', '); }); if (o.__e) { var e = o.__e; delete o.__e; return e; } }
+  return null;
+}
+function riga(tab, x) {
+  return CAMPI[tab].filter(function (k) { return x[k] !== undefined && x[k] !== '' && k !== 'disabled' && k !== 'comment'; }).map(function (k) { return k + '=' + x[k]; }).join(' ') + (x.comment ? ' comment="' + x.comment + '"' : '');
+}
+function stampa(tab) {
+  var L = C[tab];
+  if (tab === 'interfacce') { scrivi('Flags: X - disabled'); scrivi(' #   NAME      COMMENT'); C.interfacce.forEach(function (x, i) { scrivi(' ' + i + ' ' + (x.disabled ? 'X' : ' ') + ' ' + (x.name + '        ').slice(0, 9) + ' ' + x.comment); }); return; }
+  if (tab === 'identita') { scrivi('  name: ' + C.identity); return; }
+  if (!L.length) { scrivi('(vuoto)', 't-mu'); return; }
+  scrivi('Flags: X - disabled');
+  L.forEach(function (x, i) { scrivi(' ' + i + ' ' + (x.disabled === 'yes' ? 'X' : ' ') + ' ' + riga(tab, x)); });
+}
+function esporta() {
+  var r = ['# configurazione del router ' + C.identity + ' (RV-1, simulatore didattico)', '/system identity', 'set name=' + C.identity];
+  [['interfacce', '/interface'], ['indirizzi', '/ip address'], ['rotte', '/ip route'], ['filtro', '/ip firewall filter'], ['nat', '/ip firewall nat']].forEach(function (p) {
+    if (p[0] === 'interfacce') { var d = C.interfacce.filter(function (x) { return x.disabled; }); if (d.length) { r.push(p[1]); d.forEach(function (x) { r.push('set ' + x.name + ' disabled=yes'); }); } return; }
+    if (!C[p[0]].length) return; r.push(p[1]); C[p[0]].forEach(function (x) { r.push('add ' + riga(p[0], x) + (x.disabled === 'yes' ? ' disabled=yes' : '')); });
+  });
+  return r.join('\n');
+}
+function aiuto() {
+  ['Comandi (come su RouterOS, in versione semplificata):',
+   '  /interface print                         le porte del router',
+   '  /interface set ether3 disabled=yes       spegne una porta',
+   '  /ip address add address=192.168.88.1/24 interface=ether2',
+   '  /ip address print   ·   /ip address remove 0',
+   '  /ip route add dst-address=0.0.0.0/0 gateway=203.0.113.1',
+   '  /ip firewall filter add chain=forward src-address=192.168.88.11 action=drop',
+   '  /ip firewall filter add chain=input in-interface=ether1 protocol=tcp dst-port=22 action=drop',
+   '  /ip firewall nat add chain=srcnat out-interface=ether1 action=masquerade',
+   '  /ip firewall nat add chain=dstnat in-interface=ether1 protocol=tcp dst-port=80 action=dst-nat to-addresses=192.168.88.20',
+   '  /ip firewall filter move 3 0             sposta la regola 3 in cima',
+   '  /ip firewall filter disable 1  ·  enable 1  ·  remove 1',
+   '  /system identity set name=IlMioRouter',
+   '  /ping 8.8.8.8          ·   /export   ·   /export file   ·   /reset',
+   'Puoi anche entrare in un menu: scrivi /ip firewall filter e poi solo «add ...» o «print». «/» torna all\'inizio, «..» sale di uno.'
+  ].forEach(function (t) { scrivi(t, 't-mu'); });
+}
+function esegui(rigaCmd, daGUI) {
+  rigaCmd = rigaCmd.trim(); if (!rigaCmd) return;
+  scrivi((daGUI ? '(dalle finestre) ' : '') + '[admin@' + C.identity + '] ' + (CTX.length ? '/' + CTX.join('/') + ' ' : '') + '> ' + rigaCmd, 't-cmd');
+  if (rigaCmd === '?' || rigaCmd === 'help') return aiuto();
+  var parti = dividi(rigaCmd), percorso = CTX.slice();
+  if (parti[0] === '/') { CTX = []; aggiornaPrompt(); return; }
+  if (parti[0] === '..') { CTX.pop(); aggiornaPrompt(); return; }
+  if (parti[0].charAt(0) === '/') { percorso = []; parti[0] = parti[0].slice(1); if (!parti[0]) parti.shift(); }
+  // prende le parole del percorso finché formano un menu
+  var verbi = ['print', 'add', 'remove', 'set', 'disable', 'enable', 'move', 'export', 'ping', 'reset', 'file'];
+  while (parti.length && verbi.indexOf(parti[0]) < 0 && parti[0].indexOf('=') < 0) percorso.push(parti.shift());
+  var chiave = percorso.join(' '), tab = MENU[chiave], verbo = parti.shift(), resto = parti;
+  if (!verbo) {
+    if (tab || ['ip', 'ip firewall', 'system'].indexOf(chiave) >= 0) { CTX = percorso; aggiornaPrompt(); return; }
+    if (chiave === 'export') return mostraExport();
+    if (chiave === 'reset') return reset();
+    return scrivi('comando non capito: «' + rigaCmd + '». Scrivi ? per l\'aiuto.', 't-ko');
+  }
+  if (verbo === 'export' && !chiave) { if (resto[0] === 'file') { scaricaExport(); return scrivi('export salvato nel file ' + C.identity + '.rsc', 't-ok'); } return mostraExport(); }
+  if (verbo === 'ping' && !chiave) return ping(resto[0]);
+  if (verbo === 'reset' && !chiave) return reset();
+  if (!tab) return scrivi('menu non trovato: /' + chiave + '. Scrivi ? per l\'aiuto.', 't-ko');
+  if (verbo === 'print') return stampa(tab);
+  if (tab === 'identita') { if (verbo !== 'set') return scrivi('qui si usa: set name=...', 't-ko'); var pi = parametri(resto); if (!pi.o.name || !/^[A-Za-z0-9_-]{1,20}$/.test(pi.o.name)) return scrivi('serve name= senza spazi (lettere, numeri, - e _)', 't-ko'); C.identity = pi.o.name; return fatto(); }
+  if (tab === 'interfacce') {
+    if (verbo !== 'set' && verbo !== 'disable' && verbo !== 'enable') return scrivi('qui si usa: set ether3 disabled=yes, disable ether3, enable ether3', 't-ko');
+    var nome = resto.shift(), itf = C.interfacce.filter(function (x) { return x.name === nome || String(C.interfacce.indexOf(x)) === nome; })[0];
+    if (!itf) return scrivi('interfaccia non trovata: ' + nome, 't-ko');
+    if (verbo === 'set') { var ps = parametri(resto); if (ps.o.disabled) itf.disabled = ps.o.disabled === 'yes'; if (ps.o.comment !== undefined) itf.comment = ps.o.comment; } else itf.disabled = verbo === 'disable';
+    return fatto();
+  }
+  var L = C[tab];
+  if (verbo === 'add') { var p = parametri(resto); if (p.err) return scrivi(p.err, 't-ko'); if (tab === 'filtro' && !p.o.action) p.o.action = 'accept'; var e = valida(tab, p.o); if (e) return scrivi('errore: ' + e, 't-ko'); L.push(p.o); return fatto('aggiunta come numero ' + (L.length - 1)); }
+  var num = +resto[0];
+  if (resto[0] === undefined || isNaN(num) || !L[num]) return scrivi('serve il numero della riga (lo vedi con print), per esempio: ' + verbo + ' 0', 't-ko');
+  if (verbo === 'remove') { L.splice(num, 1); return fatto(); }
+  if (verbo === 'disable' || verbo === 'enable') { L[num].disabled = verbo === 'disable' ? 'yes' : undefined; if (!L[num].disabled) delete L[num].disabled; return fatto(); }
+  if (verbo === 'move') { var dove = +resto[1]; if (isNaN(dove)) return scrivi('si usa: move 3 0 (sposta la riga 3 al posto 0)', 't-ko'); var x = L.splice(num, 1)[0]; L.splice(Math.min(dove, L.length), 0, x); return fatto(); }
+  if (verbo === 'set') { var q = parametri(resto.slice(1)); if (q.err) return scrivi(q.err, 't-ko'); var nuovo = Object.assign({}, L[num], q.o); var e2 = valida(tab, Object.assign({}, nuovo)); if (e2) return scrivi('errore: ' + e2, 't-ko'); L[num] = nuovo; return fatto(); }
+  scrivi('comando non capito in /' + chiave + ': ' + verbo, 't-ko');
+}
+function fatto(t) { salva(); disegna(); controllaMissioni(); scrivi(t || 'ok', 't-ok'); aggiornaPrompt(); }
+function mostraExport() { esporta().split('\n').forEach(function (r) { scrivi(r); }); }
+function scaricaExport() { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([esporta() + '\n'], { type: 'text/plain' })); a.download = C.identity + '.rsc'; a.click(); }
+function reset() { if (!confirm('Il router torna come nuovo: si cancella tutta la configurazione. Va bene?')) return; C = vuoto(); CTX = []; FATTE = {}; fatto('router ripristinato: nessun indirizzo, nessuna regola'); }
+
+// ====================== IL VIAGGIO DI UN PACCHETTO ======================
+function indirizziRouter() { return C.indirizzi.filter(function (a) { var itf = C.interfacce.filter(function (x) { return x.name === a.interface; })[0]; return a.disabled !== 'yes' && itf && !itf.disabled; }); }
+function interfacciaPer(ip) { var best = null; indirizziRouter().forEach(function (a) { if (dentro(ip, reteDi(a.address))) best = a; }); return best; }
+function ipRouterSu(itfName) { var a = indirizziRouter().filter(function (x) { return x.interface === itfName; })[0]; return a ? a.address.split('/')[0] : null; }
+function instrada(dst) {
+  var c = interfacciaPer(dst); if (c) return { itf: c.interface, via: null, perche: 'rete collegata ' + reteDi(c.address) };
+  var best = null; C.rotte.forEach(function (r) { if (r.disabled === 'yes') return; if (dentro(dst, r['dst-address']) && (!best || lunghezza(r['dst-address']) > lunghezza(best['dst-address']))) best = r; });
+  if (!best) return null; var g = interfacciaPer(best.gateway); if (!g) return { errore: 'la rotta usa il gateway ' + best.gateway + ', ma il router non ha nessun indirizzo nella sua rete' };
+  return { itf: g.interface, via: best.gateway, perche: 'rotta ' + best['dst-address'] + ' via ' + best.gateway };
+}
+function regolaVale(r, pk, inI, outI) {
+  if (r.disabled === 'yes') return false;
+  if (r['src-address'] && !dentro(pk.src, r['src-address'].indexOf('/') < 0 ? r['src-address'] + '/32' : r['src-address'])) return false;
+  if (r['dst-address'] && !dentro(pk.dst, r['dst-address'].indexOf('/') < 0 ? r['dst-address'] + '/32' : r['dst-address'])) return false;
+  if (r.protocol && r.protocol !== pk.proto) return false;
+  if (r['dst-port'] && String(r['dst-port']).split(',').map(Number).indexOf(+pk.porta) < 0) return false;
+  if (r['in-interface'] && r['in-interface'] !== inI) return false;
+  if (r['out-interface'] && r['out-interface'] !== outI) return false;
+  return true;
+}
+function firewall(chain, pk, inI, outI, passi) {
+  for (var i = 0; i < C.filtro.length; i++) { var r = C.filtro[i]; if (r.chain !== chain) continue; if (regolaVale(r, pk, inI, outI)) { passi.push(['Firewall, catena ' + chain + ': vale la regola ' + i + ' (' + riga('filtro', r) + ') → ' + r.action.toUpperCase(), r.action === 'accept' ? '' : 'ko']); return r.action === 'accept'; } }
+  passi.push(['Firewall, catena ' + chain + ': nessuna regola vale → il pacchetto passa (se nessuna regola dice di bloccare, il router lascia passare)']); return true;
+}
+function viaggio(daK, aIp, proto, porta) {
+  var da = HOST[daK], passi = [], pk = { src: da.ip, dst: aIp, proto: proto, porta: proto === 'icmp' ? '' : porta };
+  var meta = Object.keys(HOST).map(function (k) { return HOST[k]; }).filter(function (h) { return h.ip === aIp; })[0];
+  passi.push(['Parte da ' + da.nome + ' (' + da.ip + ') verso ' + aIp + (meta ? ' (' + meta.nome + ')' : '') + ', ' + proto + (pk.porta ? ' porta ' + pk.porta : '')]);
+  var inI, ingresso;
+  var meta0 = Object.keys(HOST).map(function (k) { return HOST[k]; }).filter(function (h) { return h.ip === aIp; })[0];
+  if (da.lato === 'lan' && meta0 && meta0.lato === 'lan') {   // stessa rete: si passa dallo switch, il router non c'entra
+    passi.push(['Destinazione nella stessa rete 192.168.88.0/24: il pacchetto passa dallo switch, senza attraversare il router (il firewall non lo vede).']);
+    if (proto !== 'icmp' && meta0.porte.indexOf(+pk.porta) < 0) { passi.push(['Arriva a ' + meta0.nome + ', ma lì nessun programma ascolta sulla porta ' + pk.porta + '.', 'ko']); return { ok: false, passi: passi }; }
+    passi.push(['Arriva a ' + meta0.nome + ' (' + meta0.ip + '), che risponde.', 'ok']); return { ok: true, passi: passi, arrivo: meta0 };
+  }
+  if (da.lato === 'lan') {
+    if (!interfacciaPer(da.gw)) { passi.push(['Il PC manda il pacchetto al suo gateway ' + da.gw + ', ma nessuna porta del router ha quell\'indirizzo: il pacchetto si perde. (Missione 1)', 'ko']); return { ok: false, passi: passi }; }
+    inI = interfacciaPer(da.gw).interface; passi.push(['Arriva al router sulla porta ' + inI + ' (il router è il gateway ' + da.gw + ')']);
+  } else {
+    var wan = ipRouterSu('ether1');
+    if (!wan || !dentro(wan, ISP_RETE)) { passi.push(['Da Internet si arriva al router solo all\'indirizzo che l\'operatore ha dato a ether1 (203.0.113.2/30), ma ether1 non ce l\'ha. (Missione 2)', 'ko']); return { ok: false, passi: passi }; }
+    if (aIp !== wan) { passi.push(['Su Internet i pacchetti per ' + aIp + ' non arrivano al tuo router: da fuori si può raggiungere solo il suo indirizzo pubblico ' + wan + '.', 'ko']); return { ok: false, passi: passi }; }
+    inI = 'ether1'; passi.push(['Arriva al router sulla porta ether1, all\'indirizzo pubblico ' + wan]);
+  }
+  // dstnat
+  for (var i = 0; i < C.nat.length; i++) { var n = C.nat[i]; if (n.chain === 'dstnat' && n.action === 'dst-nat' && regolaVale(n, pk, inI, null)) { passi.push(['NAT, catena dstnat, regola ' + i + ': la destinazione diventa ' + n['to-addresses'] + (n['to-ports'] ? ':' + n['to-ports'] : '') + ' (inoltro di porta)']); pk.dst = n['to-addresses']; if (n['to-ports']) pk.porta = n['to-ports']; break; } }
+  var perRouter = indirizziRouter().some(function (a) { return a.address.split('/')[0] === pk.dst; });
+  if (perRouter) {
+    if (!firewall('input', pk, inI, null, passi)) return { ok: false, passi: passi };
+    var servizi = { 22: 'SSH', 80: 'pagina web del router', 8291: 'Winbox', 53: 'DNS' };
+    if (proto === 'icmp') { passi.push(['Il router risponde al ping', 'ok']); return { ok: true, passi: passi }; }
+    if (servizi[pk.porta]) { passi.push(['Il router riceve: è il suo servizio ' + servizi[pk.porta] + '. Pericoloso se arriva da Internet!', 'ok']); return { ok: true, passi: passi }; }
+    passi.push(['Il router non ha nessun servizio sulla porta ' + pk.porta + ': rifiuta.', 'ko']); return { ok: false, passi: passi };
+  }
+  var r = instrada(pk.dst);
+  if (!r) { passi.push(['Il router non sa dove mandare ' + pk.dst + ': non c\'è una rotta. (Missione 2)', 'ko']); return { ok: false, passi: passi }; }
+  if (r.errore) { passi.push([r.errore, 'ko']); return { ok: false, passi: passi }; }
+  passi.push(['Instradamento: esce dalla porta ' + r.itf + ' (' + r.perche + ')']);
+  if (!firewall('forward', pk, inI, r.itf, passi)) return { ok: false, passi: passi };
+  var nat = null;
+  for (var j = 0; j < C.nat.length; j++) { var m = C.nat[j]; if (m.chain === 'srcnat' && (m.action === 'masquerade' || m.action === 'src-nat') && regolaVale(m, pk, inI, r.itf)) { nat = j; break; } }
+  if (nat !== null) { var nuovo = ipRouterSu(r.itf); passi.push(['NAT, catena srcnat, regola ' + nat + ' (masquerade): il mittente ' + pk.src + ' diventa ' + nuovo]); pk.src = nuovo; }
+  var arrivo = Object.keys(HOST).map(function (k) { return HOST[k]; }).filter(function (h) { return h.ip === pk.dst; })[0];
+  if (r.itf === 'ether1' && /^192\.168\./.test(pk.src)) { passi.push(['Il pacchetto esce su Internet con il mittente privato ' + pk.src + ': la risposta non potrà mai tornare, perché su Internet gli indirizzi 192.168.x.x non esistono. Serve il NAT (Missione 3).', 'ko']); return { ok: false, passi: passi }; }
+  if (!arrivo) { passi.push(['Nessun computer ha l\'indirizzo ' + pk.dst + ' nella rete simulata.', 'ko']); return { ok: false, passi: passi }; }
+  if ((arrivo.lato === 'lan') !== (r.itf !== 'ether1')) { passi.push(['Il pacchetto esce dalla porta sbagliata: ' + arrivo.nome + ' non sta dietro ' + r.itf + '.', 'ko']); return { ok: false, passi: passi }; }
+  if (proto !== 'icmp' && arrivo.porte.indexOf(+pk.porta) < 0) { passi.push(['Arriva a ' + arrivo.nome + ', ma lì nessun programma ascolta sulla porta ' + pk.porta + '.', 'ko']); return { ok: false, passi: passi }; }
+  passi.push(['Arriva a ' + arrivo.nome + ' (' + arrivo.ip + ')' + (proto === 'icmp' ? ', che risponde al ping' : ', che risponde') + '. La risposta torna indietro per la stessa strada.', 'ok']);
+  return { ok: true, passi: passi, arrivo: arrivo };
+}
+function ping(dst) {
+  if (!dst || ip2n(dst) === null) return scrivi('si usa: /ping 8.8.8.8', 't-ko');
+  var r = instrada(dst), da = r && !r.errore ? ipRouterSu(r.itf) : null, h = Object.keys(HOST).map(function (k) { return HOST[k]; }).filter(function (x) { return x.ip === dst; })[0];
+  var ok = !!(r && !r.errore && da && h && ((h.lato === 'lan') === (r.itf !== 'ether1')));
+  for (var i = 0; i < 3; i++) scrivi('  ' + dst + (ok ? '   56 byte   tempo=' + (h.lato === 'lan' ? 1 : 18 + i) + 'ms' : '   timeout'), ok ? 't-ok' : 't-ko');
+  if (!ok) scrivi(!r ? '  nessuna rotta verso ' + dst : r.errore ? '  ' + r.errore : !h ? '  nessuno risponde a quell\'indirizzo' : '  il router non raggiunge ' + dst, 't-mu');
+}
+
+// ====================== LE MISSIONI ======================
+function prova(da, a, proto, porta) { return viaggio(da, a, proto, porta).ok; }
+var MIS = [
+  { t: '1. Dai un indirizzo alla rete interna', d: 'Porta ether2: 192.168.88.1/24. È il gateway dei PC.', ok: function () { return prova('pc1', '192.168.88.1', 'icmp'); }, c: '/ip address add address=192.168.88.1/24 interface=ether2' },
+  { t: '2. Collegati a Internet', d: 'L\'operatore ti dà 203.0.113.2/30 su ether1 e il gateway 203.0.113.1. Serve anche la rotta predefinita 0.0.0.0/0.', ok: function () { var r = instrada('8.8.8.8'); return !!(ipRouterSu('ether1') === '203.0.113.2' && r && !r.errore && r.itf === 'ether1'); }, c: '/ip address add address=203.0.113.2/30 interface=ether1  e  /ip route add dst-address=0.0.0.0/0 gateway=203.0.113.1' },
+  { t: '3. Fai navigare la rete interna', d: 'Il PC 1 deve aprire il sito su Internet (porta 80). Serve il NAT: masquerade sull\'uscita ether1.', ok: function () { return prova('pc1', '93.184.216.34', 'tcp', 80); }, c: '/ip firewall nat add chain=srcnat out-interface=ether1 action=masquerade' },
+  { t: '4. Blocca il PC 2', d: 'Il PC 2 non deve uscire su Internet. Il PC 1 sì. Il PC 2 deve però raggiungere ancora il server interno.', ok: function () { return prova('pc1', '93.184.216.34', 'tcp', 80) && !prova('pc2', '93.184.216.34', 'tcp', 80) && prova('pc2', '192.168.88.20', 'tcp', 80); }, c: 'una regola nella catena forward con src-address=192.168.88.11, out-interface=ether1 e action=drop' },
+  { t: '5. Proteggi il router', d: 'Da Internet nessuno deve entrare nel router (SSH porta 22, Winbox porta 8291). Dalla rete interna sì.', ok: function () { return !prova('esterno', '203.0.113.2', 'tcp', 22) && !prova('esterno', '203.0.113.2', 'tcp', 8291) && prova('pc1', '192.168.88.1', 'tcp', 8291); }, c: 'una regola nella catena input con in-interface=ether1 e action=drop' },
+  { t: '6. Pubblica il server web', d: 'Chi arriva da Internet sulla porta 80 dell\'indirizzo pubblico deve vedere il server 192.168.88.20. La porta 22 del server resta chiusa da fuori.', ok: function () { return prova('esterno', '203.0.113.2', 'tcp', 80) && !prova('esterno', '203.0.113.2', 'tcp', 22) && !prova('esterno', '203.0.113.2', 'tcp', 8291); }, c: '/ip firewall nat add chain=dstnat in-interface=ether1 protocol=tcp dst-port=80 action=dst-nat to-addresses=192.168.88.20' }
+];
+var FATTE = {};
+try { FATTE = JSON.parse(localStorage.getItem('rv1-missioni') || '{}'); } catch (e) {}
+function controllaMissioni() {
+  var h = '', prima = -1;
+  var tutteFinora = true;   // una missione si controlla solo quando quelle prima sono fatte; una volta fatta resta fatta
+  MIS.forEach(function (m, i) { var ok = !!FATTE[i] || (tutteFinora && m.ok()); tutteFinora = ok; if (ok && !FATTE[i]) { FATTE[i] = new Date().toLocaleString('it-IT'); scrivi('*** Missione ' + (i + 1) + ' fatta! ***', 't-ok'); } if (!ok && prima < 0) prima = i; m.ora = ok; });
+  try { localStorage.setItem('rv1-missioni', JSON.stringify(FATTE)); } catch (e) {}
+  MIS.forEach(function (m, i) {
+    h += '<div class="mis ' + (m.ora ? 'fatta' : i === prima ? 'ora' : '') + '"><b>' + m.t + '</b><div class="mu">' + m.d + '</div><div class="st">' + (m.ora ? 'FATTA' : i === prima ? 'adesso tocca a questa' : '') + '</div>' +
+      (i === prima ? '<details><summary class="mu">Aiuto</summary><code>' + m.c.replace(/</g, '&lt;') + '</code></details>' : '') + '</div>';
+  });
+  document.getElementById('missioni').innerHTML = h;
+}
+
+// ====================== LE FINESTRE (stile Winbox) ======================
+var VISTA = 'interfacce', TITOLI = { interfacce: 'Interfaces', indirizzi: 'IP · Addresses', rotte: 'IP · Routes', filtro: 'IP · Firewall · Filter Rules', nat: 'IP · Firewall · NAT', identita: 'System · Identity', aiuto: 'Guida ai comandi' };
+var CMDBASE = { indirizzi: '/ip address', rotte: '/ip route', filtro: '/ip firewall filter', nat: '/ip firewall nat' };
+function e(s) { return String(s === undefined ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function disegna() {
+  document.getElementById('titolo').textContent = TITOLI[VISTA];
+  var v = document.getElementById('vista'), h = '';
+  if (VISTA === 'interfacce') {
+    h = '<table><tr><th>#</th><th>Nome</th><th>Stato</th><th>Indirizzi</th><th>Nota</th><th></th></tr>' + C.interfacce.map(function (x, i) {
+      var ind = C.indirizzi.filter(function (a) { return a.interface === x.name; }).map(function (a) { return a.address; }).join(', ');
+      return '<tr class="' + (x.disabled ? 'dis' : '') + '"><td>' + i + '</td><td>' + x.name + '</td><td>' + (x.disabled ? 'spenta' : 'accesa') + '</td><td>' + e(ind) + '</td><td>' + e(x.comment) + '</td><td><button class="b" data-tog="' + x.name + '">' + (x.disabled ? 'Accendi' : 'Spegni') + '</button></td></tr>'; }).join('') + '</table>';
+  } else if (VISTA === 'identita') {
+    h = '<form class="f" id="fId"><label>Nome del router</label><input name="name" value="' + e(C.identity) + '"><span></span><button class="b p">Applica</button></form><p class="mu">Il nome compare in alto e nel terminale. Fallo tuo!</p>';
+  } else if (VISTA === 'aiuto') {
+    h = '<p>Il router si configura in due modi, come quelli veri: con queste finestre oppure con il terminale. <b>Tutto quello che fai con le finestre compare anche come comando nel terminale</b>: così impari i comandi.</p><p>Scrivi <code>?</code> nel terminale per l\'elenco dei comandi.</p><p class="mu">Le regole del firewall si leggono dall\'alto in basso: vale la prima che corrisponde al pacchetto. Se nessuna corrisponde, il pacchetto passa.</p>';
+  } else {
+    var L = C[VISTA], campi = CAMPI[VISTA].filter(function (k) { return k !== 'disabled'; });
+    h = '<div class="bar"><button class="b p" id="nuovo">+ Aggiungi</button></div><div id="formNuovo"></div><table><tr><th>#</th>' + campi.map(function (k) { return '<th>' + k + '</th>'; }).join('') + '<th></th></tr>' +
+      (L.length ? L.map(function (x, i) { return '<tr class="' + (x.disabled === 'yes' ? 'dis' : '') + '"><td>' + i + '</td>' + campi.map(function (k) { return '<td>' + e(x[k]) + '</td>'; }).join('') + '<td style="white-space:nowrap">' + (i > 0 ? '<button class="b" data-su="' + i + '" title="Sposta su">↑</button> ' : '') + '<button class="b" data-dis="' + i + '">' + (x.disabled === 'yes' ? 'Attiva' : 'Disattiva') + '</button> <button class="b" data-rm="' + i + '">−</button></td></tr>'; }).join('') : '<tr><td colspan="' + (campi.length + 2) + '" class="mu">vuoto: clicca «+ Aggiungi»</td></tr>') + '</table>';
+  }
+  v.innerHTML = h;
+  [].forEach.call(v.querySelectorAll('[data-tog]'), function (b) { b.onclick = function () { var x = C.interfacce.filter(function (i) { return i.name === b.dataset.tog; })[0]; esegui('/interface ' + (x.disabled ? 'enable ' : 'disable ') + x.name, true); }; });
+  [].forEach.call(v.querySelectorAll('[data-rm]'), function (b) { b.onclick = function () { esegui(CMDBASE[VISTA] + ' remove ' + b.dataset.rm, true); }; });
+  [].forEach.call(v.querySelectorAll('[data-dis]'), function (b) { b.onclick = function () { esegui(CMDBASE[VISTA] + ' ' + (C[VISTA][b.dataset.dis].disabled === 'yes' ? 'enable ' : 'disable ') + b.dataset.dis, true); }; });
+  [].forEach.call(v.querySelectorAll('[data-su]'), function (b) { b.onclick = function () { esegui(CMDBASE[VISTA] + ' move ' + b.dataset.su + ' ' + (b.dataset.su - 1), true); }; });
+  var fi = document.getElementById('fId'); if (fi) fi.onsubmit = function (ev) { ev.preventDefault(); esegui('/system identity set name=' + fi.name.value.trim(), true); };
+  var nb = document.getElementById('nuovo'); if (nb) nb.onclick = function () { moduloNuovo(); };
+}
+var SCELTE = { interface: IFACE, 'in-interface': [''].concat(IFACE), 'out-interface': [''].concat(IFACE), chain: { filtro: ['forward', 'input', 'output'], nat: ['srcnat', 'dstnat'] }, protocol: ['', 'tcp', 'udp', 'icmp'], action: { filtro: ['drop', 'accept', 'reject'], nat: ['masquerade', 'dst-nat', 'src-nat'] } };
+var AIUTI = { address: 'es. 192.168.88.1/24', 'dst-address': 'es. 0.0.0.0/0', gateway: 'es. 203.0.113.1', 'src-address': 'es. 192.168.88.11', 'dst-port': 'es. 80', 'to-addresses': 'es. 192.168.88.20', comment: 'una nota per ricordarti' };
+function moduloNuovo() {
+  var campi = CAMPI[VISTA].filter(function (k) { return k !== 'disabled'; }), f = document.getElementById('formNuovo');
+  f.innerHTML = '<form class="f" id="fN">' + campi.map(function (k) {
+    var s = SCELTE[k]; if (s && !Array.isArray(s)) s = s[VISTA];
+    return '<label>' + k + '</label>' + (s ? '<select name="' + k + '">' + s.map(function (o) { return '<option>' + o + '</option>'; }).join('') + '</select>' : '<input name="' + k + '" placeholder="' + (AIUTI[k] || '') + '">');
+  }).join('') + '<span></span><span><button class="b p">OK</button> <button class="b" type="button" id="annulla">Annulla</button></span></form>';
+  document.getElementById('annulla').onclick = function () { f.innerHTML = ''; };
+  document.getElementById('fN').onsubmit = function (ev) {
+    ev.preventDefault(); var parti = [];
+    campi.forEach(function (k) { var val = this.elements[k].value.trim(); if (val) parti.push(k + '=' + (/\s/.test(val) ? '"' + val + '"' : val)); }, this);
+    esegui(CMDBASE[VISTA] + ' add ' + parti.join(' '), true);
+  };
+}
+document.getElementById('menu').onclick = function (ev) { var b = ev.target.closest('button'); if (!b) return; VISTA = b.dataset.v; [].forEach.call(this.querySelectorAll('button'), function (x) { x.classList.toggle('on', x === b); }); disegna(); };
+
+// ====================== DISEGNO DELLA RETE ======================
+function disegnaRete() {
+  var s = '<line x1="170" y1="58" x2="170" y2="110" stroke="#7a8796" stroke-width="2"/><line x1="170" y1="150" x2="170" y2="180" stroke="#7a8796" stroke-width="2"/>' +
+    '<line x1="60" y1="190" x2="280" y2="190" stroke="#7a8796" stroke-width="2"/>' + [60, 170, 280].map(function (x) { return '<line x1="' + x + '" y1="190" x2="' + x + '" y2="205" stroke="#7a8796" stroke-width="2"/>'; }).join('') +
+    '<ellipse cx="170" cy="30" rx="105" ry="26" fill="none" stroke="#5b9bd5" stroke-width="2"/><text x="170" y="28" text-anchor="middle">Internet</text><text x="170" y="43" text-anchor="middle" class="mu">sito 93.184.216.34 · DNS 8.8.8.8</text>' +
+    '<text x="178" y="88">ether1 ' + (ipRouterSu('ether1') || '(senza indirizzo)') + '</text>' +
+    '<rect x="120" y="110" width="100" height="40" rx="6" fill="#1f2f45"/><text x="170" y="135" text-anchor="middle" style="fill:#fff;font-weight:700">' + e(C.identity) + '</text>' +
+    '<text x="178" y="172">ether2 ' + (ipRouterSu('ether2') || '(senza indirizzo)') + '</text>' +
+    [['PC 1', '.10', 60], ['Server', '.20', 170], ['PC 2', '.11', 280]].map(function (p) { return '<rect x="' + (p[2] - 32) + '" y="205" width="64" height="30" rx="4" fill="none" stroke="#7a8796"/><text x="' + p[2] + '" y="219" text-anchor="middle">' + p[0] + '</text><text x="' + p[2] + '" y="231" text-anchor="middle" style="font-size:10px">192.168.88' + p[1] + '</text>'; }).join('');
+  document.getElementById('rete').innerHTML = s;
+}
+var _disegna = disegna; disegna = function () { _disegna(); disegnaRete(); };
+
+// ====================== MANDA UN PACCHETTO ======================
+var DA = ['pc1', 'pc2', 'server', 'esterno'], A = [['93.184.216.34', 'Sito su Internet'], ['8.8.8.8', 'DNS su Internet'], ['192.168.88.20', 'Server web (interno)'], ['192.168.88.1', 'Router, lato interno'], ['203.0.113.2', 'Router, indirizzo pubblico'], ['192.168.88.10', 'PC 1']];
+document.getElementById('pDa').innerHTML = DA.map(function (k) { return '<option value="' + k + '">' + HOST[k].nome + '</option>'; }).join('');
+document.getElementById('pA').innerHTML = A.map(function (a) { return '<option value="' + a[0] + '">' + a[1] + ' (' + a[0] + ')</option>'; }).join('');
+document.getElementById('pVai').onclick = function () {
+  var r = viaggio(document.getElementById('pDa').value, document.getElementById('pA').value, document.getElementById('pProto').value, +document.getElementById('pPorta').value || 0);
+  document.getElementById('traccia').innerHTML = r.passi.map(function (p) { return '<li class="' + (p[1] === 'ok' ? 'passa' : p[1] === 'ko' ? 'blocca' : '') + '">' + e(p[0]) + '</li>'; }).join('') + '<li class="' + (r.ok ? 'passa' : 'blocca') + '">' + (r.ok ? 'ARRIVATO' : 'NON ARRIVA') + '</li>';
+};
+
+// ====================== AVVIO ======================
+CMD.addEventListener('keydown', function (ev) {
+  if (ev.key === 'Enter') { var v = CMD.value; if (v.trim()) { STORIA.push(v); SP = STORIA.length; } CMD.value = ''; esegui(v); }
+  else if (ev.key === 'ArrowUp') { if (SP > 0) { SP--; CMD.value = STORIA[SP]; } ev.preventDefault(); }
+  else if (ev.key === 'ArrowDown') { if (SP < STORIA.length - 1) { SP++; CMD.value = STORIA[SP]; } else { SP = STORIA.length; CMD.value = ''; } ev.preventDefault(); }
+});
+document.getElementById('esporta').onclick = function () { esegui('/export'); };
+document.getElementById('azzera').onclick = reset;
+scrivi('RV-1 · router virtuale per imparare (simulazione didattica ispirata a RouterOS)', 't-mu');
+scrivi('Scrivi ? e premi Invio per vedere i comandi. Comincia dalla Missione 1, a destra.', 't-mu');
+aggiornaPrompt(); disegna(); controllaMissioni();
+window.RV1 = { esegui: esegui, viaggio: viaggio, config: function () { return C; }, esporta: esporta };
+})();
+</script>
+</body>
+</html>
