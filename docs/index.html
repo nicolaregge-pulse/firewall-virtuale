@@ -36,6 +36,9 @@ svg text{fill:var(--fg);font-size:12px}
 .traccia li{margin:3px 0}.passa{color:var(--ok);font-weight:700}.blocca{color:var(--ko);font-weight:700}
 .prova{display:grid;grid-template-columns:1fr 1fr;gap:6px}.prova select,.prova input{font:inherit;padding:4px;border:1px solid var(--bd);border-radius:4px;background:var(--card);color:var(--fg);width:100%}
 .mu{color:var(--mu);font-size:13px}
+.eff td{cursor:pointer}.eff tr:hover td{background:var(--win)}.si{color:var(--ok);font-weight:700}.no{color:var(--ko);font-weight:700}.ri{color:var(--warn);font-weight:700}
+.cambio{background:#fff3c4;color:#1d2430;font-weight:700}
+@keyframes scorri{to{stroke-dashoffset:-20}}.viaggio{fill:none;stroke-width:4;stroke-dasharray:8 6;animation:scorri .6s linear infinite;stroke-linecap:round}
 </style>
 </head>
 <body>
@@ -58,7 +61,8 @@ svg text{fill:var(--fg);font-size:12px}
   <section class="win"><h2>Terminal <span class="mu">(scrivi un comando e premi Invio · «?» per l'aiuto)</span></h2><div id="term"></div><div id="riga"><span id="prompt">[admin@RV-1] &gt;</span><input id="cmd" autocomplete="off" spellcheck="false"></div></section>
 </main>
 <aside class="lato">
-  <section class="win"><h2>La rete</h2><div class="corpo"><svg id="rete" viewBox="0 0 340 250" width="100%"></svg></div></section>
+  <section class="win"><h2>La rete <span class="mu">(la linea mostra la strada dell'ultimo pacchetto)</span></h2><div class="corpo"><svg id="rete" viewBox="0 0 340 250" width="100%"></svg></div></section>
+  <section class="win"><h2>Effetto sulla rete</h2><div class="corpo" id="effetto"></div></section>
   <section class="win"><h2>Manda un pacchetto</h2><div class="corpo">
     <div class="prova">
       <label>Da<select id="pDa"></select></label>
@@ -68,6 +72,7 @@ svg text{fill:var(--fg);font-size:12px}
     </div>
     <p><button class="b p" id="pVai">Manda</button></p>
     <ol class="traccia" id="traccia"></ol>
+    <div id="dati"></div>
   </div></section>
   <section class="win"><h2>Missioni</h2><div class="corpo" id="missioni"></div></section>
 </aside>
@@ -170,6 +175,7 @@ function aiuto() {
 }
 function esegui(rigaCmd, daGUI) {
   rigaCmd = rigaCmd.trim(); if (!rigaCmd) return;
+  ULTIMO = rigaCmd;
   scrivi((daGUI ? '(dalle finestre) ' : '') + '[admin@' + C.identity + '] ' + (CTX.length ? '/' + CTX.join('/') + ' ' : '') + '> ' + rigaCmd, 't-cmd');
   if (rigaCmd === '?' || rigaCmd === 'help') return aiuto();
   var parti = dividi(rigaCmd), percorso = CTX.slice();
@@ -209,7 +215,7 @@ function esegui(rigaCmd, daGUI) {
   if (verbo === 'set') { var q = parametri(resto.slice(1)); if (q.err) return scrivi(q.err, 't-ko'); var nuovo = Object.assign({}, L[num], q.o); var e2 = valida(tab, Object.assign({}, nuovo)); if (e2) return scrivi('errore: ' + e2, 't-ko'); L[num] = nuovo; return fatto(); }
   scrivi('comando non capito in /' + chiave + ': ' + verbo, 't-ko');
 }
-function fatto(t) { salva(); disegna(); controllaMissioni(); scrivi(t || 'ok', 't-ok'); aggiornaPrompt(); }
+function fatto(t) { salva(); disegna(); controllaMissioni(); scrivi(t || 'ok', 't-ok'); aggiornaPrompt(); effetto(); }
 function mostraExport() { esporta().split('\n').forEach(function (r) { scrivi(r); }); }
 function scaricaExport() { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([esporta() + '\n'], { type: 'text/plain' })); a.download = C.identity + '.rsc'; a.click(); }
 function reset() { if (!confirm('Il router torna come nuovo: si cancella tutta la configurazione. Va bene?')) return; C = vuoto(); CTX = []; FATTE = {}; fatto('router ripristinato: nessun indirizzo, nessuna regola'); }
@@ -238,28 +244,40 @@ function firewall(chain, pk, inI, outI, passi) {
   for (var i = 0; i < C.filtro.length; i++) { var r = C.filtro[i]; if (r.chain !== chain) continue; if (regolaVale(r, pk, inI, outI)) { passi.push(['Firewall, catena ' + chain + ': vale la regola ' + i + ' (' + riga('filtro', r) + ') → ' + r.action.toUpperCase(), r.action === 'accept' ? '' : 'ko']); return r.action === 'accept'; } }
   passi.push(['Firewall, catena ' + chain + ': nessuna regola vale → il pacchetto passa (se nessuna regola dice di bloccare, il router lascia passare)']); return true;
 }
-function viaggio(daK, aIp, proto, porta) {
+// TR = la traccia dell'ultimo viaggio: la strada sulla mappa (via) e i dati del pacchetto tratto per tratto (dati)
+var TR = null, HX = { pc1: 60, server: 170, pc2: 280 };
+function pt(x, y) { TR.via.push([x, y]); }
+function dato(dove, pk) { TR.dati.push({ dove: dove, src: pk.src, dst: pk.dst, proto: pk.proto, porta: pk.porta }); }
+function hx(ip) { var k = Object.keys(HOST).filter(function (k) { return HOST[k].ip === ip; })[0]; return HX[k]; }
+function viaggio(daK, aIp, proto, porta) { TR = { via: [], dati: [] }; var r = viaggio0(daK, aIp, proto, porta); r.via = TR.via; r.dati = TR.dati; return r; }
+function viaggio0(daK, aIp, proto, porta) {
   var da = HOST[daK], passi = [], pk = { src: da.ip, dst: aIp, proto: proto, porta: proto === 'icmp' ? '' : porta };
   var meta = Object.keys(HOST).map(function (k) { return HOST[k]; }).filter(function (h) { return h.ip === aIp; })[0];
+  if (da.lato === 'lan') pt(HX[daK], 205); else pt(170, 42);
+  dato(da.lato === 'lan' ? 'dal ' + da.nome + ' verso il router' : 'da Internet verso il router', pk);
   passi.push(['Parte da ' + da.nome + ' (' + da.ip + ') verso ' + aIp + (meta ? ' (' + meta.nome + ')' : '') + ', ' + proto + (pk.porta ? ' porta ' + pk.porta : '')]);
   var inI, ingresso;
   var meta0 = Object.keys(HOST).map(function (k) { return HOST[k]; }).filter(function (h) { return h.ip === aIp; })[0];
   if (da.lato === 'lan' && meta0 && meta0.lato === 'lan') {   // stessa rete: si passa dallo switch, il router non c'entra
+    pt(HX[daK], 190); pt(hx(aIp), 190); pt(hx(aIp), 205); TR.dati[0].dove = 'dal ' + da.nome + ' a ' + meta0.nome + ' (dentro lo switch)';
     passi.push(['Destinazione nella stessa rete 192.168.88.0/24: il pacchetto passa dallo switch, senza attraversare il router (il firewall non lo vede).']);
     if (proto !== 'icmp' && meta0.porte.indexOf(+pk.porta) < 0) { passi.push(['Arriva a ' + meta0.nome + ', ma lì nessun programma ascolta sulla porta ' + pk.porta + '.', 'ko']); return { ok: false, passi: passi }; }
     passi.push(['Arriva a ' + meta0.nome + ' (' + meta0.ip + '), che risponde.', 'ok']); return { ok: true, passi: passi, arrivo: meta0 };
   }
   if (da.lato === 'lan') {
+    pt(HX[daK], 190);
     if (!interfacciaPer(da.gw)) { passi.push(['Il PC manda il pacchetto al suo gateway ' + da.gw + ', ma nessuna porta del router ha quell\'indirizzo: il pacchetto si perde. (Missione 1)', 'ko']); return { ok: false, passi: passi }; }
+    pt(170, 190); pt(170, 150); pt(170, 130);
     inI = interfacciaPer(da.gw).interface; passi.push(['Arriva al router sulla porta ' + inI + ' (il router è il gateway ' + da.gw + ')']);
   } else {
-    var wan = ipRouterSu('ether1');
+    var wan = ipRouterSu('ether1'); pt(170, 58);
     if (!wan || !dentro(wan, ISP_RETE)) { passi.push(['Da Internet si arriva al router solo all\'indirizzo che l\'operatore ha dato a ether1 (203.0.113.2/30), ma ether1 non ce l\'ha. (Missione 2)', 'ko']); return { ok: false, passi: passi }; }
     if (aIp !== wan) { passi.push(['Su Internet i pacchetti per ' + aIp + ' non arrivano al tuo router: da fuori si può raggiungere solo il suo indirizzo pubblico ' + wan + '.', 'ko']); return { ok: false, passi: passi }; }
+    pt(170, 110); pt(170, 130);
     inI = 'ether1'; passi.push(['Arriva al router sulla porta ether1, all\'indirizzo pubblico ' + wan]);
   }
   // dstnat
-  for (var i = 0; i < C.nat.length; i++) { var n = C.nat[i]; if (n.chain === 'dstnat' && n.action === 'dst-nat' && regolaVale(n, pk, inI, null)) { passi.push(['NAT, catena dstnat, regola ' + i + ': la destinazione diventa ' + n['to-addresses'] + (n['to-ports'] ? ':' + n['to-ports'] : '') + ' (inoltro di porta)']); pk.dst = n['to-addresses']; if (n['to-ports']) pk.porta = n['to-ports']; break; } }
+  for (var i = 0; i < C.nat.length; i++) { var n = C.nat[i]; if (n.chain === 'dstnat' && n.action === 'dst-nat' && regolaVale(n, pk, inI, null)) { passi.push(['NAT, catena dstnat, regola ' + i + ': la destinazione diventa ' + n['to-addresses'] + (n['to-ports'] ? ':' + n['to-ports'] : '') + ' (inoltro di porta)']); pk.dst = n['to-addresses']; if (n['to-ports']) pk.porta = n['to-ports']; dato('dentro il router, dopo il dst-nat (regola ' + i + ')', pk); break; } }
   var perRouter = indirizziRouter().some(function (a) { return a.address.split('/')[0] === pk.dst; });
   if (perRouter) {
     if (!firewall('input', pk, inI, null, passi)) return { ok: false, passi: passi };
@@ -277,6 +295,8 @@ function viaggio(daK, aIp, proto, porta) {
   for (var j = 0; j < C.nat.length; j++) { var m = C.nat[j]; if (m.chain === 'srcnat' && (m.action === 'masquerade' || m.action === 'src-nat') && regolaVale(m, pk, inI, r.itf)) { nat = j; break; } }
   if (nat !== null) { var nuovo = ipRouterSu(r.itf); passi.push(['NAT, catena srcnat, regola ' + nat + ' (masquerade): il mittente ' + pk.src + ' diventa ' + nuovo]); pk.src = nuovo; }
   var arrivo = Object.keys(HOST).map(function (k) { return HOST[k]; }).filter(function (h) { return h.ip === pk.dst; })[0];
+  if (r.itf === 'ether1') { pt(170, 110); pt(170, 58); pt(170, 42); } else { pt(170, 150); pt(170, 190); if (arrivo && HX[Object.keys(HOST).filter(function (k) { return HOST[k] === arrivo; })[0]] !== undefined) { pt(hx(arrivo.ip), 190); pt(hx(arrivo.ip), 205); } }
+  dato('dal router verso ' + (arrivo ? arrivo.nome : pk.dst) + ', esce da ' + r.itf, pk);
   if (r.itf === 'ether1' && /^192\.168\./.test(pk.src)) { passi.push(['Il pacchetto esce su Internet con il mittente privato ' + pk.src + ': la risposta non potrà mai tornare, perché su Internet gli indirizzi 192.168.x.x non esistono. Serve il NAT (Missione 3).', 'ko']); return { ok: false, passi: passi }; }
   if (!arrivo) { passi.push(['Nessun computer ha l\'indirizzo ' + pk.dst + ' nella rete simulata.', 'ko']); return { ok: false, passi: passi }; }
   if ((arrivo.lato === 'lan') !== (r.itf !== 'ether1')) { passi.push(['Il pacchetto esce dalla porta sbagliata: ' + arrivo.nome + ' non sta dietro ' + r.itf + '.', 'ko']); return { ok: false, passi: passi }; }
@@ -366,12 +386,20 @@ function disegnaRete() {
   var s = '<line x1="170" y1="58" x2="170" y2="110" stroke="#7a8796" stroke-width="2"/><line x1="170" y1="150" x2="170" y2="180" stroke="#7a8796" stroke-width="2"/>' +
     '<line x1="60" y1="190" x2="280" y2="190" stroke="#7a8796" stroke-width="2"/>' + [60, 170, 280].map(function (x) { return '<line x1="' + x + '" y1="190" x2="' + x + '" y2="205" stroke="#7a8796" stroke-width="2"/>'; }).join('') +
     '<ellipse cx="170" cy="30" rx="105" ry="26" fill="none" stroke="#5b9bd5" stroke-width="2"/><text x="170" y="28" text-anchor="middle">Internet</text><text x="170" y="43" text-anchor="middle" class="mu">sito 93.184.216.34 · DNS 8.8.8.8</text>' +
-    '<text x="178" y="88">ether1 ' + (ipRouterSu('ether1') || '(senza indirizzo)') + '</text>' +
+    '<text x="178" y="88">ether1 ' + (spenta('ether1') ? 'SPENTA: cavo morto' : ipRouterSu('ether1') || '(senza indirizzo)') + '</text>' +
     '<rect x="120" y="110" width="100" height="40" rx="6" fill="#1f2f45"/><text x="170" y="135" text-anchor="middle" style="fill:#fff;font-weight:700">' + e(C.identity) + '</text>' +
-    '<text x="178" y="172">ether2 ' + (ipRouterSu('ether2') || '(senza indirizzo)') + '</text>' +
+    '<text x="178" y="172">ether2 ' + (spenta('ether2') ? 'SPENTA: cavo morto' : ipRouterSu('ether2') || '(senza indirizzo)') + '</text>' +
     [['PC 1', '.10', 60], ['Server', '.20', 170], ['PC 2', '.11', 280]].map(function (p) { return '<rect x="' + (p[2] - 32) + '" y="205" width="64" height="30" rx="4" fill="none" stroke="#7a8796"/><text x="' + p[2] + '" y="219" text-anchor="middle">' + p[0] + '</text><text x="' + p[2] + '" y="231" text-anchor="middle" style="font-size:10px">192.168.88' + p[1] + '</text>'; }).join('');
+  if (SEL && SEL.via.length > 1) {
+    var col = SEL.ok ? (SEL.rischio ? '#d69e2e' : '#2f9e5a') : '#d64545', fine = SEL.via[SEL.via.length - 1];
+    s += '<polyline class="viaggio" stroke="' + col + '" points="' + SEL.via.map(function (q) { return q.join(','); }).join(' ') + '"/>';
+    s += SEL.ok ? '<circle cx="' + fine[0] + '" cy="' + fine[1] + '" r="7" fill="' + col + '"/>' : '<path d="M' + (fine[0] - 8) + ',' + (fine[1] - 8) + 'l16,16m0,-16l-16,16" stroke="' + col + '" stroke-width="4"/>';
+  }
+  if (spenta('ether1')) s += '<line x1="170" y1="58" x2="170" y2="110" stroke="#d64545" stroke-width="3" stroke-dasharray="4 4"/>';
+  if (spenta('ether2')) s += '<line x1="170" y1="150" x2="170" y2="190" stroke="#d64545" stroke-width="3" stroke-dasharray="4 4"/>';
   document.getElementById('rete').innerHTML = s;
 }
+function spenta(n) { return C.interfacce.some(function (x) { return x.name === n && x.disabled; }); }
 var _disegna = disegna; disegna = function () { _disegna(); disegnaRete(); };
 
 // ====================== MANDA UN PACCHETTO ======================
@@ -381,7 +409,62 @@ document.getElementById('pA').innerHTML = A.map(function (a) { return '<option v
 document.getElementById('pVai').onclick = function () {
   var r = viaggio(document.getElementById('pDa').value, document.getElementById('pA').value, document.getElementById('pProto').value, +document.getElementById('pPorta').value || 0);
   document.getElementById('traccia').innerHTML = r.passi.map(function (p) { return '<li class="' + (p[1] === 'ok' ? 'passa' : p[1] === 'ko' ? 'blocca' : '') + '">' + e(p[0]) + '</li>'; }).join('') + '<li class="' + (r.ok ? 'passa' : 'blocca') + '">' + (r.ok ? 'ARRIVATO' : 'NON ARRIVA') + '</li>';
+  r.rischio = r.ok && document.getElementById('pDa').value === 'esterno';
+  SEL = r; disegnaRete(); mostraDati(r);
 };
+// I dati del pacchetto, tratto per tratto: in giallo quello che il router ha cambiato
+function mostraDati(r) {
+  var h = '<h3 style="font-size:14px;margin:10px 0 4px">I dati del pacchetto, tratto per tratto</h3><table><tr><th>Tratto</th><th>Mittente</th><th>Destinatario</th><th>Porta</th></tr>';
+  r.dati.forEach(function (d, i) {
+    var p = r.dati[i - 1];
+    function c(k, v) { return '<td' + (p && p[k] !== d[k] ? ' class="cambio" title="cambiato dal router"' : '') + '>' + e(v) + '</td>'; }
+    h += '<tr><td>' + e(d.dove) + '</td>' + c('src', d.src) + c('dst', d.dst) + c('porta', d.proto + (d.porta ? ' ' + d.porta : '')) + '</tr>';
+  });
+  h += '</table>' + (r.dati.some(function (d, i) { return i && (d.src !== r.dati[i - 1].src || d.dst !== r.dati[i - 1].dst); }) ? '<p class="mu">In giallo: i dati che il router ha riscritto (NAT). Il contenuto del pacchetto è lo stesso, cambiano gli indirizzi sulla «busta».</p>' : '<p class="mu">Il router non ha cambiato gli indirizzi: il pacchetto arriva con la stessa «busta» con cui è partito.</p>');
+  document.getElementById('dati').innerHTML = h;
+}
+
+// ====================== EFFETTO SULLA RETE ======================
+// Dopo ogni modifica il router rifà 11 prove di traffico e mostra che cosa è cambiato rispetto a prima.
+var FLUSSI = [
+  ['pc1', '93.184.216.34', 'tcp', 80, 'PC 1 apre il sito su Internet'],
+  ['pc2', '93.184.216.34', 'tcp', 80, 'PC 2 apre il sito su Internet'],
+  ['pc1', '8.8.8.8', 'udp', 53, 'PC 1 chiede al DNS il nome di un sito'],
+  ['pc1', '8.8.8.8', 'icmp', 0, 'PC 1 fa ping verso Internet'],
+  ['server', '93.184.216.34', 'tcp', 443, 'Il server scarica aggiornamenti da Internet'],
+  ['pc2', '192.168.88.20', 'tcp', 80, 'PC 2 apre il server interno'],
+  ['pc1', '192.168.88.1', 'tcp', 8291, 'PC 1 entra nel router con Winbox'],
+  ['esterno', '203.0.113.2', 'tcp', 8291, 'Uno sconosciuto prova Winbox sul router'],
+  ['esterno', '203.0.113.2', 'tcp', 22, 'Uno sconosciuto prova SSH sul router'],
+  ['esterno', '203.0.113.2', 'tcp', 80, 'Uno sconosciuto apre la porta 80 pubblica'],
+  ['esterno', '203.0.113.2', 'icmp', 0, 'Uno sconosciuto fa ping al router']
+];
+var SEL = null, ULTIMO = '', PRIMA = null;
+function motivo(r) {
+  if (!r.ok) { var ko = r.passi.filter(function (p) { return p[1] === 'ko'; }).pop(); return ko ? ko[0] : ''; }
+  var k = r.passi.filter(function (p) { return /NAT|Firewall.*regola|servizio/.test(p[0]); }).map(function (p) { return p[0]; });
+  return k.length ? k.join(' · ') : 'strada libera: nessuna regola lo ferma';
+}
+function fotografia() { return FLUSSI.map(function (f) { var r = viaggio(f[0], f[1], f[2], f[3]); return { ok: r.ok, perche: motivo(r) }; }); }
+function stato(f, x) { return x.ok ? (f[0] === 'esterno' ? '<span class="ri">entra da Internet</span>' : '<span class="si">passa</span>') : '<span class="no">bloccato</span>'; }
+function effetto() {
+  var ora = fotografia(), h = '';
+  if (!PRIMA) h = '<p class="mu">Fai una modifica (una finestra o un comando): qui vedi subito che cosa cambia per il traffico della rete.</p>';
+  else {
+    var cambi = FLUSSI.map(function (f, i) { return i; }).filter(function (i) { return PRIMA[i].ok !== ora[i].ok || PRIMA[i].perche !== ora[i].perche; });
+    h = '<p><b>Ultima modifica:</b><br><code>' + e(ULTIMO) + '</code></p>';
+    if (cambi.length) h += '<p>Cambia per <b>' + cambi.length + '</b> ' + (cambi.length === 1 ? 'percorso' : 'percorsi') + '. Clicca una riga per vedere la strada sulla mappa e i dati del pacchetto.</p><table class="eff"><tr><th>Chi verso chi</th><th>Prima</th><th>Adesso</th></tr>' +
+      cambi.map(function (i) { return '<tr data-f="' + i + '"><td><b>' + FLUSSI[i][4] + '</b>' + (PRIMA[i].ok === ora[i].ok ? '<div class="mu">Stesso risultato, ma cambia il punto in cui si decide.</div>' : '') + '</td><td>' + stato(FLUSSI[i], PRIMA[i]) + '<div class="mu">' + e(PRIMA[i].perche) + '</div></td><td>' + stato(FLUSSI[i], ora[i]) + '<div class="mu">' + e(ora[i].perche) + '</div></td></tr>'; }).join('') + '</table>';
+    else h += '<p>Questa modifica <b>non cambia</b> nessuno degli 11 percorsi di prova: stessi risultati, negli stessi punti.' + (/identity|comment/.test(ULTIMO) ? ' È normale: il nome e le note servono a chi legge la configurazione, non ai pacchetti.' : ' Controlla nella tabella qui sotto se la regola vale davvero per il traffico che volevi toccare (catena, interfaccia, indirizzo, porta).') + '</p>';
+  }
+  h += '<details' + (PRIMA ? '' : ' open') + '><summary>Tutto il traffico di prova: chi raggiunge chi adesso</summary><table class="eff"><tr><th>Chi verso chi</th><th>Adesso</th></tr>' +
+    FLUSSI.map(function (f, i) { return '<tr data-f="' + i + '"><td>' + f[4] + '</td><td>' + stato(f, ora[i]) + '</td></tr>'; }).join('') + '</table><p class="mu">Arancione = da Internet si entra nella tua rete: va bene solo se l\'hai deciso tu (per esempio il server web pubblicato).</p></details>';
+  var box = document.getElementById('effetto'); box.innerHTML = h;
+  [].forEach.call(box.querySelectorAll('[data-f]'), function (tr) { tr.onclick = function () { var f = FLUSSI[+tr.dataset.f]; document.getElementById('pDa').value = f[0]; document.getElementById('pA').value = f[1]; document.getElementById('pProto').value = f[2]; document.getElementById('pPorta').value = f[3] || 80; document.getElementById('pVai').click(); }; });
+  // la mappa mostra il primo percorso cambiato
+  if (PRIMA) { var c0 = FLUSSI.map(function (f, i) { return i; }).filter(function (i) { return PRIMA[i].ok !== ora[i].ok || PRIMA[i].perche !== ora[i].perche; })[0]; if (c0 !== undefined) box.querySelector('tr[data-f="' + c0 + '"]').click(); }
+  PRIMA = ora;
+}
 
 // ====================== AVVIO ======================
 CMD.addEventListener('keydown', function (ev) {
@@ -393,7 +476,7 @@ document.getElementById('esporta').onclick = function () { esegui('/export'); };
 document.getElementById('azzera').onclick = reset;
 scrivi('RV-1 · router virtuale per imparare (simulazione didattica ispirata a RouterOS)', 't-mu');
 scrivi('Scrivi ? e premi Invio per vedere i comandi. Comincia dalla Missione 1, a destra.', 't-mu');
-aggiornaPrompt(); disegna(); controllaMissioni();
+aggiornaPrompt(); disegna(); controllaMissioni(); effetto();
 window.RV1 = { esegui: esegui, viaggio: viaggio, config: function () { return C; }, esporta: esporta };
 })();
 </script>
